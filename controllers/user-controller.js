@@ -45,7 +45,14 @@ const userController = {
   },
   getUser: (req, res, next) => {
     return Promise.all([
-      User.findByPk(req.params.id, { raw: true }),
+      User.findByPk(req.params.id, {
+        include: [
+          { model: User, as: 'Followers' },
+          { model: User, as: 'Followings' },
+          { model: Restaurant, as: 'FavoritedRestaurants' }
+        ],
+        nest: true
+      }),
       Comment.findAll({
         where: { userId: req.params.id },
         include: { model: Restaurant, attributes: ['id', 'image'] },
@@ -56,10 +63,16 @@ const userController = {
       })
     ])
       .then(([userProfile, comments]) => {
+        const loginUser = getUser(req)
         assert(userProfile, "User didn't exist!")
         res.render('users/profile', {
-          user: getUser(req),
-          userProfile,
+          user: loginUser,
+          userProfile: {
+            ...userProfile.toJSON(),
+            isFollowed: loginUser.Followings.some(
+              followingUser => followingUser.id === userProfile.id
+            )
+          },
           comments
         })
       })
@@ -93,23 +106,25 @@ const userController = {
   },
   addFavorite: (req, res, next) => {
     const { restaurantId } = req.params
+    const loginUser = getUser(req)
     return Promise.all([
       Restaurant.findByPk(restaurantId),
-      Favorite.findOne({ where: { userId: getUser(req).id, restaurantId } })
+      Favorite.findOne({ where: { userId: loginUser.id, restaurantId } })
     ])
       .then(([restaurant, favorite]) => {
         assert(restaurant, "Restaurant didn't exist!")
         if (favorite) throw new Error('You have favorited this restaurant!')
 
-        return Favorite.create({ userId: getUser(req).id, restaurantId })
+        return Favorite.create({ userId: loginUser.id, restaurantId })
       })
       .then(() => res.redirect('back'))
       .catch(err => next(err))
   },
   removeFavorite: (req, res, next) => {
     const { restaurantId } = req.params
+    const loginUser = getUser(req)
     return Favorite.findOne({
-      where: { userId: getUser(req).id, restaurantId }
+      where: { userId: loginUser.id, restaurantId }
     })
       .then(favorite => {
         assert(favorite, "You haven't favorited this restaurant")
@@ -120,21 +135,23 @@ const userController = {
   },
   addLike: (req, res, next) => {
     const { restaurantId } = req.params
+    const loginUser = getUser(req)
     return Promise.all([
       Restaurant.findByPk(restaurantId),
-      Like.findOne({ where: { userId: getUser(req).id, restaurantId } })
+      Like.findOne({ where: { userId: loginUser.id, restaurantId } })
     ])
       .then(([restaurant, like]) => {
         assert(restaurant, "Restaurant didn't exist!")
         if (like) throw new Error('You have liked this restaurant!')
-        return Like.create({ userId: getUser(req).id, restaurantId })
+        return Like.create({ userId: loginUser.id, restaurantId })
       })
       .then(() => res.redirect('back'))
       .catch(err => next(err))
   },
   removeLike: (req, res, next) => {
+    const loginUser = getUser(req)
     return Like.findOne({
-      where: { userId: getUser(req).id, restaurantId: req.params.restaurantId }
+      where: { userId: loginUser.id, restaurantId: req.params.restaurantId }
     })
       .then(like => {
         assert(like, "You haven't liked this restaurant")
@@ -150,7 +167,7 @@ const userController = {
           .map(user => ({
             ...user.toJSON(),
             followerCount: user.Followers.length,
-            isFollowed: getUser(req).Followings.some(
+            isFollowed: req.user.Followings.some(
               followingUser => followingUser.id === user.id
             )
           }))
@@ -161,10 +178,11 @@ const userController = {
   },
   addFollowing: (req, res, next) => {
     const { userId } = req.params
+    const loginUser = getUser(req)
     return Promise.all([
       User.findByPk(userId, { raw: true }),
       Followship.findOne({
-        where: { followerId: getUser(req).id, followingId: userId },
+        where: { followerId: loginUser.id, followingId: userId },
         raw: true
       })
     ])
@@ -172,7 +190,7 @@ const userController = {
         assert(user, "User didn't exist!")
         if (followship) throw new Error('You have followed this user!')
         return Followship.create({
-          followerId: getUser(req).id,
+          followerId: loginUser.id,
           followingId: userId
         })
       })
@@ -181,8 +199,9 @@ const userController = {
   },
   removeFollowing: (req, res, next) => {
     const { userId } = req.params
+    const loginUser = getUser(req)
     return Followship.findOne({
-      where: { followerId: getUser(req).id, followingId: userId }
+      where: { followerId: loginUser.id, followingId: userId }
     })
       .then(followship => {
         assert(followship, "You haven't followed this user!")

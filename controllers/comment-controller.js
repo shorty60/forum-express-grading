@@ -1,9 +1,10 @@
 const assert = require('assert')
 const { User, Restaurant, Comment } = require('../models')
+const { getUser } = require('../helpers/auth-helpers')
 const commentController = {
   postComment: (req, res, next) => {
     const { restaurantId, text } = req.body
-    const userId = req.user.id
+    const userId = getUser(req).id
     assert(text, 'Comment text is required!')
     return Promise.all([
       User.findByPk(userId),

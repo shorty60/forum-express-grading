@@ -26,10 +26,11 @@ const restaurantController = {
         if (!restaurants.rows.length) {
           return req.flash('error_messages', 'No restaurant is found!')
         }
+        const loginUser = getUser(req)
         const favoritedRestaurantsId =
-          getUser(req) && getUser(req).FavoritedRestaurants.map(fr => fr.id)
+          loginUser && loginUser.FavoritedRestaurants.map(fr => fr.id)
         const likedRestaurantsId =
-          getUser(req) && getUser(req).LikedRestaurants.map(lr => lr.id) // 取liked id
+          loginUser && loginUser.LikedRestaurants.map(lr => lr.id) // 取liked id
         const datas = restaurants.rows.map(r => ({
           ...r,
           description: r.description.substring(0, 50),
@@ -63,11 +64,12 @@ const restaurantController = {
         return restaurant.increment('viewCounts')
       })
       .then(restaurant => {
+        const loginUser = getUser(req)
         const isFavorited = restaurant.FavoritedUsers.some(
-          fu => fu.id === getUser(req).id
+          fu => fu.id === loginUser.id
         )
         const isLiked = restaurant.LikedUsers.some(
-          likeduser => likeduser.id === getUser(req).id
+          likeduser => likeduser.id === loginUser.id
         )
         res.render('restaurant', {
           restaurant: restaurant.toJSON(),
@@ -129,13 +131,15 @@ const restaurantController = {
       include: [{ model: User, as: 'FavoritedUsers' }]
     })
       .then(restaurants => {
+        const loginUser = getUser(req)
         const result = restaurants
           .map(restaurant => ({
             ...restaurant.toJSON(),
+            description: restaurant.description.substring(0, 100),
             favoritedCount: restaurant.FavoritedUsers.length,
             isFavorited:
-              getUser(req) &&
-              getUser(req).FavoritedRestaurants.some(
+              loginUser &&
+              loginUser.FavoritedRestaurants.some(
                 favoritedRestaurant => favoritedRestaurant.id === restaurant.id
               )
           }))
